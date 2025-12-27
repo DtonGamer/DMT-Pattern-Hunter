@@ -1,0 +1,46 @@
+{
+  "name": "trac-dmt-scanner",
+  "version": "1.0.0",
+  "description": "DMT Pattern Scanner on Trac Network - Bitcoin blockchain pattern analysis and NAT discovery tool",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "DEBUG=true node index.js",
+    "test": "node test/run-tests.js",
+    "deploy": "npm run deploy:setup && npm run deploy:start",
+    "deploy:setup": "node scripts/setup.js",
+    "deploy:start": "pm2 start ecosystem.config.js --env production",
+    "deploy:stop": "pm2 stop ecosystem.config.js",
+    "deploy:restart": "pm2 restart ecosystem.config.js",
+    "deploy:reload": "pm2 reload ecosystem.config.js",
+    "deploy:logs": "pm2 logs",
+    "deploy:status": "pm2 status",
+    "deploy:monit": "pm2 monit",
+    "deploy:flush": "pm2 flush",
+    "deploy:delete": "pm2 delete ecosystem.config.js",
+    "bot:register": "node scripts/register-bot.js",
+    "bot:start": "node scripts/start-bot.js",
+    "bot:dev": "node scripts/dev-bot.js",
+    "scanner": "npm start",
+    "scanner:dev": "npm run dev"
+  },
+  "keywords": [
+    "trac",
+    "dmt",
+    "bitcoin",
+    "pattern-scanner",
+    "tap-protocol",
+    "nat",
+    "ordinals"
+  ],
+  "author": "Trac Network",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^12.5.0",
+    "dotenv": "^17.2.3",
+    "node-fetch": "^2.7.0"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

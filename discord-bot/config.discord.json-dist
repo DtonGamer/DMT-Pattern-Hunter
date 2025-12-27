@@ -1,0 +1,22 @@
+# Discord Bot Configuration
+# Copy this file to config.discord.json and fill in your values
+
+{
+  "discord": {
+    "token": "YOUR_BOT_TOKEN_HERE",
+    "applicationId": "YOUR_APPLICATION_ID_HERE",
+    "guildId": "YOUR_GUILD_ID_HERE",
+    "channels": {
+      "announcements": "ANNOUNCEMENT_CHANNEL_ID_HERE",
+      "logs": "LOG_CHANNEL_ID_HERE"
+    },
+    "allowedRoles": {
+      "Verified": "VERIFIED_ROLE_ID_HERE",
+      "Trusted": "TRUSTED_ROLE_ID_HERE"
+    },
+    "permissions": {
+      "allowAnonymousScans": true,
+      "askForAnnouncementPermission": true
+    }
+  }
+}

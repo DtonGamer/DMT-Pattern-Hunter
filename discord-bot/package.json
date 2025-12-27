@@ -1,0 +1,21 @@
+{
+  "name": "dmt-pattern-discord-bot",
+  "version": "1.0.0",
+  "description": "DMT Pattern Hunter Discord Bot",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "DEBUG=true node index.js",
+    "register": "node src/register-commands.js",
+    "test": "node src/test-commands.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^17.2.3",
+    "node-fetch": "^2.7.0"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

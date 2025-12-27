@@ -1,0 +1,18 @@
+# Environment
+node_modules/
+*.log
+.env
+
+# Database
+discord-bot/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Config
+config.discord.json
+.env
+
+# Logs
+discord-bot/logs/
+logs/
