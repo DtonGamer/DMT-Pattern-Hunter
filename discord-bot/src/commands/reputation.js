@@ -1,8 +1,9 @@
+
 /**
  * Slash Command - Check User Reputation
  */
 
-import { SlashCommandBuilder  } from 'discord.js';
+import { SlashCommandBuilder } from 'discord.js';
 import EmbedHelper from '../helpers/embed.js';
 
 export default {
@@ -11,11 +12,29 @@ export default {
     .setDescription('Check your reputation and tier'),
 
   async execute(interaction, contract, db, config) {
-    await interaction.deferReply();
+    // IMMEDIATE defer - must happen first
+    try {
+      await interaction.deferReply();
+    } catch (error) {
+      console.error('[Reputation] Failed to defer reply:', error);
+      return;
+    }
 
     try {
-      const userId = interaction.user.id;
+      // CRITICAL: Validate config first
+      if (!config || !config.tiers) {
+        console.error('[Reputation Command] Config missing. Received:', {
+          hasConfig: !!config,
+          configKeys: config ? Object.keys(config) : 'none',
+          hasTiers: !!config?.tiers
+        });
+        
+        return interaction.editReply({
+          content: '❌ Bot configuration error. Config or tiers missing. Please contact an administrator.'
+        });
+      }
 
+      const userId = interaction.user.id;
       const user = db.getOrCreateUser(userId);
       const bitcoinAddress = user.bitcoin_address || null;
 
@@ -24,10 +43,10 @@ export default {
       let userReputation;
 
       if (!contract) {
-        // Fallback when contract is unavailable - use basic reputation from DB
+        // Fallback when contract is unavailable
         userReputation = {
           address: bitcoinAddress || userId,
-          tier: 'anonymous', // Default to anonymous when contract is unavailable
+          tier: 'anonymous',
           reputation: 0,
           discoveries: 0,
           verifiedDiscoveries: 0,
@@ -39,19 +58,31 @@ export default {
       } else if (bitcoinAddress) {
         try {
           userReputation = await contract.getUserReputation(bitcoinAddress);
-          // Determine tier based on reputation data
-          let tier;
-          if (userReputation.totalDiscoveries >= 50 && userReputation.verifiedDiscoveries >= 20) {
+
+          // Normalize field names (contract might use different names)
+          userReputation.discoveries = userReputation.discoveries || userReputation.totalDiscoveries || 0;
+          userReputation.verifiedDiscoveries = userReputation.verifiedDiscoveries || 0;
+          userReputation.reputation = userReputation.reputation || 0;
+          userReputation.violations = userReputation.violations || 0;
+
+          // Determine tier based on config thresholds
+          const verifiedReq = config.tiers.verified?.upgradeRequirement?.discoveries || 10;
+          const trustedReq = config.tiers.trusted?.upgradeRequirement?.discoveries || 50;
+          const trustedVerifiedReq = config.tiers.trusted?.upgradeRequirement?.verifiedDiscoveries || 20;
+
+          let tier = 'anonymous';
+          if (userReputation.discoveries >= trustedReq && userReputation.verifiedDiscoveries >= trustedVerifiedReq) {
             tier = 'trusted';
-          } else if (userReputation.totalDiscoveries >= 10) {
+          } else if (userReputation.discoveries >= verifiedReq) {
             tier = 'verified';
-          } else {
-            tier = 'anonymous';
           }
+          
           userReputation.tier = tier;
+          userReputation.scansToday = db.getScanCountToday(userId);
+          userReputation.address = bitcoinAddress;
         } catch (error) {
           console.error('[Reputation Command] Error getting reputation from contract:', error);
-          // Fallback to basic reputation from DB
+          // Fallback to basic reputation
           userReputation = {
             address: bitcoinAddress,
             tier: 'anonymous',
@@ -65,6 +96,7 @@ export default {
           };
         }
       } else {
+        // No Bitcoin address linked
         userReputation = {
           address: userId,
           tier: 'anonymous',
@@ -77,16 +109,53 @@ export default {
         };
       }
 
-      const scanLimit = config.tiers[userReputation.tier]?.scansPerDay || 5;
+      // Get scan limit from config
+      const tierConfig = config.tiers[userReputation.tier];
+      if (!tierConfig) {
+        console.error('[Reputation Command] Tier config not found for tier:', userReputation.tier);
+        console.error('[Reputation Command] Available tiers:', Object.keys(config.tiers));
+        
+        return interaction.editReply({
+          content: `❌ Invalid tier configuration for tier: ${userReputation.tier}. Please contact an administrator.`
+        });
+      }
 
+      const scanLimit = tierConfig.scansPerDay || 5;
+
+      // Create embed
       const embed = EmbedHelper.createReputationEmbed(userReputation, scanLimit);
 
+      // Add tip if no Bitcoin address
       if (!bitcoinAddress) {
         embed.addFields({
           name: '💡 Tip',
-          value: 'Link your Bitcoin address with /link to track discoveries and earn reputation!',
+          value: 'Link your Bitcoin address with `/link` to track discoveries and earn reputation!',
           inline: false
         });
+      }
+
+      // Add tier progression info
+      const verifiedReq = config.tiers.verified?.upgradeRequirement?.discoveries || 10;
+      const trustedReq = config.tiers.trusted?.upgradeRequirement?.discoveries || 50;
+      const trustedVerifiedReq = config.tiers.trusted?.upgradeRequirement?.verifiedDiscoveries || 20;
+
+      if (userReputation.tier === 'anonymous' && userReputation.discoveries < verifiedReq) {
+        const remaining = verifiedReq - userReputation.discoveries;
+        embed.addFields({
+          name: '📈 Next Tier: Verified',
+          value: `Make ${remaining} more ${remaining === 1 ? 'discovery' : 'discoveries'} to unlock Verified tier (${config.tiers.verified.scansPerDay} scans/day)`,
+          inline: false
+        });
+      } else if (userReputation.tier === 'verified') {
+        const remainingTotal = Math.max(0, trustedReq - userReputation.discoveries);
+        const remainingVerified = Math.max(0, trustedVerifiedReq - userReputation.verifiedDiscoveries);
+        if (remainingTotal > 0 || remainingVerified > 0) {
+          embed.addFields({
+            name: '📈 Next Tier: Trusted',
+            value: `Need ${remainingTotal} more total discoveries and ${remainingVerified} more verified discoveries to unlock Trusted tier (${config.tiers.trusted.scansPerDay} scans/day)`,
+            inline: false
+          });
+        }
       }
 
       await interaction.editReply({ embeds: [embed] });
@@ -94,12 +163,16 @@ export default {
     } catch (error) {
       console.error('[Reputation Command] Error:', error);
 
-      const errorEmbed = EmbedHelper.createErrorEmbed(
-        'Failed to Load Reputation',
-        'Could not load your reputation data. Please try again.'
-      );
+      try {
+        const errorEmbed = EmbedHelper.createErrorEmbed(
+          'Failed to Load Reputation',
+          'Could not load your reputation data. Please try again.'
+        );
 
-      await interaction.editReply({ embeds: [errorEmbed] });
+        await interaction.editReply({ embeds: [errorEmbed] });
+      } catch (replyError) {
+        console.error('[Reputation Command] Failed to send error message:', replyError);
+      }
     }
   }
 };

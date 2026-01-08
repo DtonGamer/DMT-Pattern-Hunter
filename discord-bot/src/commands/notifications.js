@@ -2,7 +2,7 @@
  * Slash Command - Manage Notifications
  */
 
-import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle  } from 'discord.js';
+import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import EmbedHelper from '../helpers/embed.js';
 
 export default {
@@ -18,7 +18,7 @@ export default {
       const guildId = interaction.guildId;
       const channelId = interaction.channelId;
 
-      if (!config.permissions.askForAnnouncementPermission) {
+      if (!config.discord?.permissions?.askForAnnouncementPermission) {
         const errorEmbed = EmbedHelper.createErrorEmbed(
           'Notifications Disabled',
           'Announcement notifications are currently disabled in bot configuration.'

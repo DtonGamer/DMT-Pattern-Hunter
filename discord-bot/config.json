@@ -1,0 +1,70 @@
+{
+  "network": {
+    "production": {
+      "channel": "dmt_pattern_hunter_mainnet_r1",
+      "bootstrap": "",
+      "ordTapHost": "https://fra-01.tap-reader.xyz"
+    },
+    "development": {
+      "channel": "dmt_pattern_hunter_testnet_r1",
+      "bootstrap": "",
+      "ordTapHost": "https://fra-01.tap-reader.xyz"
+    }
+  },
+  "active": "development",
+  "scanner": {
+    "defaultField": 16,
+    "defaultBlockRange": {
+      "start": 800000,
+      "end": 800100
+    }
+  },
+  "tiers": {
+    "anonymous": {
+      "name": "BASIC",
+      "scansPerDay": 5,
+      "canSubmitDiscoveries": false,
+      "canVerifyPatterns": false
+    },
+    "verified": {
+      "name": "VERIFIED",
+      "scansPerDay": 100,
+      "canSubmitDiscoveries": true,
+      "canVerifyPatterns": true,
+      "upgradeRequirement": {
+        "discoveries": 10
+      }
+    },
+    "trusted": {
+      "name": "TRUSTED",
+      "scansPerDay": 1000,
+      "canCreateGuilds": true,
+      "canRegisterElements": true,
+      "upgradeRequirement": {
+        "discoveries": 50,
+        "verifiedDiscoveries": 20
+      }
+    }
+  },
+  "blockDataSources": {
+    "primary": "blockchain-info",
+    "fallback": ["bitcoin-core"],
+    "bitcoinCore": {
+      "url": "http://127.0.0.1:8332",
+      "username": "",
+      "password": ""
+    },
+    "blockchainInfo": {
+      "baseUrl": "https://blockchain.info"
+    }
+  },
+  "features": {
+    "enableWebsocket": false,
+    "enableRest": false,
+    "enableGossip": true
+  },
+  "storage": {
+    "localCacheMax": 50,
+    "sharedSyncInterval": 60000
+  }
+}

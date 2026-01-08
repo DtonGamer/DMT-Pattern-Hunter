@@ -54,15 +54,63 @@ class DiscordBot {
     await this.client.login(this.config.discord.token);
   }
 
+  getDefaultTiers() {
+    return {
+      anonymous: {
+        name: "BASIC",
+        scansPerDay: 5,
+        canSubmitDiscoveries: false,
+        canVerifyPatterns: false
+      },
+      verified: {
+        name: "VERIFIED",
+        scansPerDay: 100,
+        canSubmitDiscoveries: true,
+        canVerifyPatterns: true,
+        upgradeRequirement: {
+          discoveries: 10
+        }
+      },
+      trusted: {
+        name: "TRUSTED",
+        scansPerDay: 1000,
+        canCreateGuilds: true,
+        canRegisterElements: true,
+        upgradeRequirement: {
+          discoveries: 50,
+          verifiedDiscoveries: 20
+        }
+      }
+    };
+  }
+
   loadConfig() {
     try {
-      const configPath = path.join(__dirname, '../config.discord.json');
+      // Load main config with tiers from config.json
+      const mainConfigPath = path.join(__dirname, '../config.json');
+      const discordConfigPath = path.join(__dirname, '../config.discord.json');
 
-      if (fs.existsSync(configPath)) {
-        const configData = fs.readFileSync(configPath, 'utf8');
-        this.config = JSON.parse(configData);
-        console.log('[Bot] Loaded config from config.discord.json');
+      let mainConfig = {};
+      if (fs.existsSync(mainConfigPath)) {
+        const mainConfigData = fs.readFileSync(mainConfigPath, 'utf8');
+        mainConfig = JSON.parse(mainConfigData);
+        console.log('[Bot] Loaded main config from config.json');
+      }
+
+      // Load Discord-specific config
+      if (fs.existsSync(discordConfigPath)) {
+        const discordConfigData = fs.readFileSync(discordConfigPath, 'utf8');
+        const discordConfig = JSON.parse(discordConfigData);
+        
+        // Merge: discord settings + tiers from main config
+        this.config = {
+          ...discordConfig,
+          tiers: mainConfig.tiers || this.getDefaultTiers()
+        };
+        
+        console.log('[Bot] Loaded Discord config + tiers');
       } else {
+        // Environment variables fallback
         this.config = {
           discord: {
             token: process.env.DISCORD_TOKEN,
@@ -80,12 +128,22 @@ class DiscordBot {
               allowAnonymousScans: true,
               askForAnnouncementPermission: true
             }
-          }
+          },
+          tiers: mainConfig.tiers || this.getDefaultTiers()
         };
         console.log('[Bot] Loaded config from environment variables');
       }
 
-      if (!this.config.discord.token) {
+      // VALIDATE tiers exist
+      if (!this.config.tiers || !this.config.tiers.anonymous) {
+        console.error('[Bot] WARNING: Tiers not properly loaded, using defaults');
+        this.config.tiers = this.getDefaultTiers();
+      }
+
+      // Debug log
+      console.log('[Bot] Config loaded with tiers:', Object.keys(this.config.tiers).join(', '));
+
+      if (!this.config.discord || !this.config.discord.token) {
         throw new Error('Discord bot token not configured. Set DISCORD_TOKEN in .env');
       }
     } catch (error) {
@@ -134,19 +192,28 @@ class DiscordBot {
       if (!command) return;
 
       try {
+        // Debug: Log command execution
+        console.log(`[Bot] Executing command: ${interaction.commandName}`);
+        console.log(`[Bot] Config tiers available:`, this.config?.tiers ? 'Yes' : 'No');
+        
         await command.execute(interaction, this.contract, this.db, this.config);
       } catch (error) {
         console.error(`[Bot] Error executing ${interaction.commandName}:`, error);
 
         const errorReply = {
           content: 'There was an error executing this command!',
-          ephemeral: true
+          flags: 64 // Use flags instead of ephemeral
         };
 
-        if (interaction.replied || interaction.deferred) {
-          await interaction.followUp(errorReply);
-        } else {
-          await interaction.reply(errorReply);
+        try {
+          if (interaction.deferred) {
+            await interaction.editReply(errorReply);
+          } else if (!interaction.replied) {
+            await interaction.reply(errorReply);
+          }
+          // If already replied, do nothing
+        } catch (replyError) {
+          console.error('[Bot] Could not send error reply:', replyError.message);
         }
       }
     });
@@ -156,28 +223,48 @@ class DiscordBot {
 
       const customId = interaction.customId;
 
-      if (customId.startsWith('notify_enable_')) {
-        const userId = customId.split('_')[2];
-        if (interaction.user.id !== userId) {
-          return interaction.reply({ content: 'This button is not for you.', ephemeral: true });
-        }
+      try {
+        if (customId.startsWith('notify_enable_')) {
+          const userId = customId.split('_')[2];
+          if (interaction.user.id !== userId) {
+            return interaction.reply({ content: 'This button is not for you.', flags: 64 });
+          }
 
-        this.db.updateNotificationPreference(userId, interaction.channelId, true);
-        await interaction.update({
-          content: '✅ Notifications enabled! You will receive alerts when you discover rare patterns.',
-          components: []
-        });
-      } else if (customId.startsWith('notify_disable_')) {
-        const userId = customId.split('_')[2];
-        if (interaction.user.id !== userId) {
-          return interaction.reply({ content: 'This button is not for you.', ephemeral: true });
-        }
+          this.db.updateNotificationPreference(userId, interaction.channelId, true);
+          await interaction.update({
+            content: '✅ Notifications enabled! You will receive alerts when you discover rare patterns.',
+            components: []
+          });
+        } else if (customId.startsWith('notify_disable_')) {
+          const userId = customId.split('_')[2];
+          if (interaction.user.id !== userId) {
+            return interaction.reply({ content: 'This button is not for you.', flags: 64 });
+          }
 
-        this.db.updateNotificationPreference(userId, interaction.channelId, false);
-        await interaction.update({
-          content: '❌ Notifications disabled.',
-          components: []
-        });
+          this.db.updateNotificationPreference(userId, interaction.channelId, false);
+          await interaction.update({
+            content: '❌ Notifications disabled.',
+            components: []
+          });
+        }
+      } catch (error) {
+        console.error('[Bot] Error handling button interaction:', error);
+
+        try {
+          if (interaction.replied || interaction.deferred) {
+            await interaction.followUp({
+              content: 'There was an error processing your request!',
+              flags: 64
+            });
+          } else {
+            await interaction.reply({
+              content: 'There was an error processing your request!',
+              flags: 64
+            });
+          }
+        } catch (replyError) {
+          console.error('[Bot] Error sending error reply for button:', replyError.message);
+        }
       }
     });
 
