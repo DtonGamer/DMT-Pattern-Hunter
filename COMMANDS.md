@@ -8,7 +8,7 @@ Quick reference for common commands in DMT Pattern Hunter.
 # Deploy everything (setup dependencies)
 npm run deploy:setup
 
-# Deploy Discord bot with PM2
+# Deploy Discord bot with 2
 npm run deploy:start
 
 # Run scanner manually (when needed)

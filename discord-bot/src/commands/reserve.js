@@ -30,9 +30,20 @@ export default {
 
     try {
       const userId = interaction.user.id;
+      const user = db.getOrCreateUser(userId);
       const member = await interaction.guild.members.fetch(userId);
 
-      const tier = PermissionHelper.getUserTier(member, config);
+      // Check if contract is available before checking permissions
+      if (!contract) {
+        const errorEmbed = EmbedHelper.createErrorEmbed(
+          'Service Offline',
+          'The reservation service is currently offline. Please try again later.\n\n' +
+          'You can still use other commands like /reputation, /discovery, and /link while we work on the service.'
+        );
+        return await interaction.editReply({ embeds: [errorEmbed] });
+      }
+
+      const tier = await PermissionHelper.getUserTier(userId, user.bitcoin_address, contract);
 
       if (!PermissionHelper.hasPermission(tier, 'reserve', config)) {
         const errorEmbed = EmbedHelper.createErrorEmbed(

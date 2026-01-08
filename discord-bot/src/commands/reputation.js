@@ -23,8 +23,47 @@ export default {
 
       let userReputation;
 
-      if (bitcoinAddress) {
-        userReputation = await contract.getUserReputation(bitcoinAddress);
+      if (!contract) {
+        // Fallback when contract is unavailable - use basic reputation from DB
+        userReputation = {
+          address: bitcoinAddress || userId,
+          tier: 'anonymous', // Default to anonymous when contract is unavailable
+          reputation: 0,
+          discoveries: 0,
+          verifiedDiscoveries: 0,
+          scansToday: db.getScanCountToday(userId),
+          violations: 0,
+          joinedAt: user.joined_at,
+          error: 'Contract unavailable'
+        };
+      } else if (bitcoinAddress) {
+        try {
+          userReputation = await contract.getUserReputation(bitcoinAddress);
+          // Determine tier based on reputation data
+          let tier;
+          if (userReputation.totalDiscoveries >= 50 && userReputation.verifiedDiscoveries >= 20) {
+            tier = 'trusted';
+          } else if (userReputation.totalDiscoveries >= 10) {
+            tier = 'verified';
+          } else {
+            tier = 'anonymous';
+          }
+          userReputation.tier = tier;
+        } catch (error) {
+          console.error('[Reputation Command] Error getting reputation from contract:', error);
+          // Fallback to basic reputation from DB
+          userReputation = {
+            address: bitcoinAddress,
+            tier: 'anonymous',
+            reputation: 0,
+            discoveries: 0,
+            verifiedDiscoveries: 0,
+            scansToday: db.getScanCountToday(userId),
+            violations: 0,
+            joinedAt: user.joined_at,
+            error: 'Unable to fetch reputation data'
+          };
+        }
       } else {
         userReputation = {
           address: userId,

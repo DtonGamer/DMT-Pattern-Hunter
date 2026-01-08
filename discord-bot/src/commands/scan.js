@@ -42,7 +42,7 @@ export default {
       const user = db.getOrCreateUser(userId);
       const member = await interaction.guild.members.fetch(userId);
 
-      const tier = PermissionHelper.getUserTier(member, config);
+      const tier = await PermissionHelper.getUserTier(userId, user.bitcoin_address, contract);
 
       db.updateLastActive(userId);
 
@@ -70,6 +70,16 @@ export default {
 
       const bitcoinAddress = user.bitcoin_address || `${userId}`;
       const isLinked = !!user.bitcoin_address;
+
+      // Check if contract is available before attempting scan
+      if (!contract) {
+        const errorEmbed = EmbedHelper.createErrorEmbed(
+          'Scanner Offline',
+          'The pattern scanner is currently offline. Please try again later.\n\n' +
+          'You can still use other commands like /reputation, /discovery, and /link while we work on the scanner.'
+        );
+        return await interaction.editReply({ embeds: [errorEmbed] });
+      }
 
       const result = await contract.scanPattern(
         pattern,

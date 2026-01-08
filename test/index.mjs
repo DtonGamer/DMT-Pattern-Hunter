@@ -7,11 +7,14 @@ import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
+
 import { Client, Collection, GatewayIntentBits, ActivityType } from 'discord.js';
 import DatabaseManager from './src/db/sqlite.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const commandsPath = path.join(__dirname, 'src', 'commands');
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
 class DiscordBot {
   constructor() {
@@ -23,13 +26,11 @@ class DiscordBot {
       ]
     });
 
+    this.commands = new Collection();
     this.db = new DatabaseManager(process.env.DATABASE_PATH || './data/bot.db');
     this.contract = null;
-    this.commands = new Collection();
-  }
 
-  async initialize() {
-    await this.setupCommands();
+    this.setupCommands();
     this.setupEventHandlers();
   }
 
@@ -41,13 +42,20 @@ class DiscordBot {
     this.loadConfig();
 
     try {
+      // Dynamically import contract using ESM wrapper
       const { default: Contract } = await import('../contract/contract.mjs');
+
       this.contract = new Contract('../config.json');
       await this.contract.init();
-      console.log('[Bot] Contract initialized successfully\n');
+
+      console.log('[Bot] Contract initialized successfully');
+      console.log(`[Bot] Channel: ${this.contract.config.channel}`);
+      console.log(`[Bot] TAP API: ${this.contract.config.ordTapHost}\n`);
+
     } catch (error) {
       console.warn('[Bot] Warning: Failed to initialize contract:', error.message);
-      console.warn('[Bot] Running in limited mode without blockchain integration\n');
+      console.warn('[Bot] Running in limited mode without blockchain integration');
+      console.warn('[Bot] Some commands may not work properly\n');
       this.contract = null;
     }
 
@@ -86,8 +94,9 @@ class DiscordBot {
       }
 
       if (!this.config.discord.token) {
-        throw new Error('Discord bot token not configured. Set DISCORD_TOKEN in .env');
+        throw new Error('Discord bot token not configured. Set DISCORD_TOKEN in .env or config.discord.json');
       }
+
     } catch (error) {
       console.error('[Bot] Failed to load config:', error.message);
       process.exit(1);
@@ -95,22 +104,15 @@ class DiscordBot {
   }
 
   async setupCommands() {
-    const commandsPath = path.join(__dirname, 'src', 'commands');
-    const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-
     for (const file of commandFiles) {
-      try {
-        const filePath = path.join(commandsPath, file);
-        const fileUrl = pathToFileURL(filePath);
-        const module = await import(fileUrl);
-        const command = module.default;
+      const filePath = path.join(commandsPath, file);
+      const fileUrl = pathToFileURL(filePath);
+      const module = await import(fileUrl);
+      const command = module.default;
 
-        if ('data' in command && 'execute' in command) {
-          this.commands.set(command.data.name, command);
-          console.log(`[Bot] Loaded command: ${command.data.name}`);
-        }
-      } catch (error) {
-        console.error(`[Bot] Failed to load ${file}:`, error.message);
+      if ('data' in command && 'execute' in command) {
+        this.commands.set(command.data.name, command);
+        console.log(`[Bot] Loaded command: ${command.data.name}`);
       }
     }
 
@@ -118,12 +120,14 @@ class DiscordBot {
   }
 
   setupEventHandlers() {
-    this.client.once('clientReady', async () => {
+    this.client.once('ready', async () => {
       console.log(`[Bot] Logged in as ${this.client.user.tag}`);
-      console.log(`[Bot] Connected to ${this.client.guilds.cache.size} guild(s)`);
+      console.log(`[Bot] Connected to ${this.client.guilds.cache.size} guilds`);
+      console.log(`[Bot] User ID: ${this.client.user.id}`);
       console.log('');
 
       this.client.user.setActivity('Scanning blockchain patterns...', { type: ActivityType.Watching });
+
       await this.periodicTasks();
     });
 
@@ -131,7 +135,11 @@ class DiscordBot {
       if (!interaction.isChatInputCommand()) return;
 
       const command = this.commands.get(interaction.commandName);
-      if (!command) return;
+
+      if (!command) {
+        console.error(`[Bot] No command matching ${interaction.commandName} was found.`);
+        return;
+      }
 
       try {
         await command.execute(interaction, this.contract, this.db, this.config);
@@ -158,22 +166,29 @@ class DiscordBot {
 
       if (customId.startsWith('notify_enable_')) {
         const userId = customId.split('_')[2];
+        const channelId = interaction.channelId;
+
         if (interaction.user.id !== userId) {
           return interaction.reply({ content: 'This button is not for you.', ephemeral: true });
         }
 
-        this.db.updateNotificationPreference(userId, interaction.channelId, true);
+        this.db.updateNotificationPreference(userId, channelId, true);
+
         await interaction.update({
           content: '✅ Notifications enabled! You will receive alerts when you discover rare patterns.',
           components: []
         });
+
       } else if (customId.startsWith('notify_disable_')) {
         const userId = customId.split('_')[2];
+
         if (interaction.user.id !== userId) {
           return interaction.reply({ content: 'This button is not for you.', ephemeral: true });
         }
 
-        this.db.updateNotificationPreference(userId, interaction.channelId, false);
+        const channelId = interaction.channelId;
+        this.db.updateNotificationPreference(userId, channelId, false);
+
         await interaction.update({
           content: '❌ Notifications disabled.',
           components: []
@@ -184,12 +199,24 @@ class DiscordBot {
     this.client.on('error', error => {
       console.error('[Bot] Discord client error:', error);
     });
+
+    this.client.on('disconnect', () => {
+      console.log('[Bot] Discord client disconnected');
+    });
+
+    this.client.on('reconnecting', () => {
+      console.log('[Bot] Reconnecting to Discord...');
+    });
   }
 
   async periodicTasks() {
+    console.log('[Bot] Starting periodic tasks...');
+
     setInterval(() => {
       this.db.cleanupExpiredReservations();
     }, 60 * 60 * 1000);
+
+    console.log('[Bot] Periodic tasks scheduled (cleanup expired reservations every hour)');
   }
 
   async log(message, type = 'info') {
@@ -197,9 +224,14 @@ class DiscordBot {
 
     try {
       const logChannel = await this.client.channels.fetch(this.config.discord.channels.logs);
+
       const timestamp = new Date().toLocaleString();
-      const emoji = type === 'error' ? '❌' : type === 'warning' ? '⚠️' : type === 'success' ? '✅' : 'ℹ️';
+      const emoji = type === 'error' ? '❌' :
+                     type === 'warning' ? '⚠️' :
+                     type === 'success' ? '✅' : 'ℹ️';
+
       await logChannel.send(`${emoji} [${timestamp}] ${message}`);
+
     } catch (error) {
       console.error('[Bot] Failed to send to log channel:', error);
     }
@@ -210,7 +242,6 @@ async function main() {
   const bot = new DiscordBot();
 
   try {
-    await bot.initialize();
     await bot.init();
 
     process.on('SIGINT', () => {
@@ -226,24 +257,17 @@ async function main() {
       bot.client.destroy();
       process.exit(0);
     });
+
   } catch (error) {
     console.error('[Bot] Fatal error:', error);
+    console.error(error.stack);
     bot.db.close();
     process.exit(1);
   }
 }
 
-// Windows-compatible module detection
-const isMainModule = process.argv[1] && (
-  import.meta.url === pathToFileURL(process.argv[1]).href ||
-  import.meta.url.endsWith('index.js')
-);
-
-if (isMainModule) {
-  main().catch(error => {
-    console.error('[Bot] Fatal error:', error);
-    process.exit(1);
-  });
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
 }
 
 export default DiscordBot;

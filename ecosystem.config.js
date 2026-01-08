@@ -2,8 +2,8 @@ module.exports = {
   apps: [
     {
       name: 'dmt-discord-bot',
-      script: './discord-bot/index.js',
-      instances: 1,
+      cwd: './discord-bot',  // Add this line
+      script: './index.js',
       autorestart: true,
       watch: false,
       max_memory_restart: '500M',

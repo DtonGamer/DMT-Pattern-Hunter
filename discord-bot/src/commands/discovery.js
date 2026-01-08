@@ -25,6 +25,16 @@ export default {
 
       db.updateLastActive(userId);
 
+      // Check if contract is available before getting discoveries
+      if (!contract) {
+        const infoEmbed = EmbedHelper.createInfoEmbed(
+          'Scanner Offline',
+          'The discovery system is currently offline. Please try again later.\n\n' +
+          'You can still use other commands like /reputation, /scan, and /link while we work on the system.'
+        );
+        return await interaction.editReply({ embeds: [infoEmbed] });
+      }
+
       const discoveries = await contract.getRecentDiscoveries(limit);
 
       if (discoveries.length === 0) {

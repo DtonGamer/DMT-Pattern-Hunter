@@ -35,6 +35,16 @@ export default {
       const userId = interaction.user.id;
       db.updateLastActive(userId);
 
+      // Check if contract is available before checking element availability
+      if (!contract) {
+        const errorEmbed = EmbedHelper.createErrorEmbed(
+          'Service Offline',
+          'The element availability service is currently offline. Please try again later.\n\n' +
+          'You can still use other commands like /reputation, /discovery, and /link while we work on the service.'
+        );
+        return await interaction.editReply({ embeds: [errorEmbed] });
+      }
+
       const check = await contract.checkElementAvailability(name, pattern, field);
 
       const embed = EmbedHelper.createElementAvailabilityEmbed(check);

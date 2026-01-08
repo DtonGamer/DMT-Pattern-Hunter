@@ -4,11 +4,11 @@
  */
 
 import { DatabaseSync } from 'node:sqlite';
-import path from 'path';
-import fs from 'fs';
+import path from 'node:path';
+import fs from 'node:fs';
 
 class DatabaseManager {
-  constructor(dbPath = './discord-bot/data/bot.db') {
+  constructor(dbPath = './data/bot.db') {
     const dir = path.dirname(dbPath);
 
     if (!fs.existsSync(dir)) {
@@ -16,7 +16,7 @@ class DatabaseManager {
     }
 
     this.db = new DatabaseSync(dbPath);
-    this.db.pragma('journal_mode = WAL');
+    this.db.exec('PRAGMA journal_mode = WAL');
     this.initSchema();
   }
 
