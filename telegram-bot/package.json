@@ -1,0 +1,32 @@
+{
+  "name": "trac-dmt-telegram-bot",
+  "version": "1.0.0",
+  "description": "DMT Pattern Hunter Telegram Bot - Bitcoin blockchain pattern analysis and NAT discovery tool",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "DEBUG=true node index.js",
+    "test": "node test/run-tests.js"
+  },
+  "keywords": [
+    "trac",
+    "dmt",
+    "bitcoin",
+    "pattern-scanner",
+    "tap-protocol",
+    "nat",
+    "ordinals",
+    "telegram",
+    "telegram-bot"
+  ],
+  "author": "Trac Network",
+  "license": "MIT",
+  "dependencies": {
+    "node-telegram-bot-api": "^0.65.1",
+    "dotenv": "^17.2.3",
+    "node:sqlite": "^1.0.1"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

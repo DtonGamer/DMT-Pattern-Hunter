@@ -1,0 +1,9 @@
+{
+  "telegram": {
+    "token": "YOUR_BOT_TOKEN",
+    "permissions": {
+      "allowAnonymousScans": true,
+      "askForAnnouncementPermission": true
+    }
+  }
+}
