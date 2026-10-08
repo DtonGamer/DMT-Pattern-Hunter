@@ -1,3 +1,5 @@
+# Built with OpenCode + GLM
+
 # DMT Pattern Hunter - Trac Network
 
 Phase 1 MVP: Bitcoin blockchain pattern discovery and NAT analysis tool built on Trac Network.
